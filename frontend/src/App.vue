@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import TaskPage from './components/TaskPage.vue'
+import TaskPage from './pages/TaskPage.vue'
 </script>
 
 <template>

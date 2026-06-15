@@ -29,7 +29,7 @@
 
       <!-- 任务方块网格 -->
       <div v-else class="task-grid">
-        <TaskCard v-for="task in paginatedTasks" :key="task.id" :task="task" @update:task="updateTask" />
+        <TaskCard v-for="task in paginatedTasks" :key="task.id" :task="task" @update:task="updateTask" @delete:task="deleteTask" />
       </div>
 
       <!-- 分页控件 -->
@@ -43,9 +43,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import TaskCard from './TaskCard.vue'
-import type { Task } from '../types/task'
+import { ref, computed, onMounted } from 'vue'
+import TaskCard from '../components/TaskCard.vue'
+import type { Task } from '../types/task.ts'
 
 
 // 状态定义
@@ -67,58 +67,109 @@ const paginatedTasks = computed(() => {
 })
 
 // 发布任务方法
-const publishTask = () => {
+const publishTask = async () => {
   if (!newTask.value.title.trim()) return
 
-  const task: Task = {
-    id: Date.now().toString(),
+  const taskData = {
     title: newTask.value.title.trim(),
     content: newTask.value.content.trim(),
-    date: new Date().toLocaleString(),
     status: '已发布',
     estimatedCompletionTime: newTask.value.estimatedCompletionTime || undefined
   }
 
-  // 将新任务插入到最前面
-  tasks.value.unshift(task)
-  
-  // 重置表单，并自动跳转回第一页查看新任务
-  newTask.value.title = ''
-  newTask.value.content = ''
-  newTask.value.estimatedCompletionTime = ''
-  currentPage.value = 1
+  try {
+    const response = await fetch('http://localhost:8080/api/tasks/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(taskData)
+    })
+    if (!response.ok) throw new Error('网络请求失败')
+    
+    // 发布成功后立马请求接口 渲染新数据
+    await fetchTasks()
+    
+    // 重置表单，并自动跳转回第一页查看新任务
+    newTask.value.title = ''
+    newTask.value.content = ''
+    newTask.value.estimatedCompletionTime = ''
+    currentPage.value = 1
+  } catch (error) {
+    console.error('API 请求出错:', error)
+    alert('发布任务失败，请检查后端服务是否启动。')
+  }
 }
 
 // 接收子组件抛出的更新事件，并同步数据
-const updateTask = (updatedTask: Task) => {
-  const index = tasks.value.findIndex(t => t.id === updatedTask.id);
-  if (index !== -1) {
-    tasks.value[index] = updatedTask;
+const updateTask = async (updatedTask: Task) => {
+  try {
+    const response = await fetch('http://localhost:8080/api/tasks/update', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedTask)
+    })
+    if (!response.ok) throw new Error('网络请求失败')
+    
+    // 更新成功后立马请求接口 刷新数据
+    await fetchTasks()
+  } catch (error) {
+    console.error('API 请求出错:', error)
+    alert('更新任务状态失败，请重试。')
   }
 };
 
-// 生成一些初始的测试数据以便于观察分页和方块布局
-const now = new Date();
-const tomorrow = new Date(now);
-tomorrow.setDate(tomorrow.getDate() + 1);
-// 转成本地时间的 YYYY-MM-DDTHH:mm 格式，以便 datetime-local 输入框能正确识别
-const defaultEstimatedTime = new Date(tomorrow.getTime() - (tomorrow.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-
-for (let i = 1; i <= 15; i++) {
-  tasks.value.push({
-    id: `${i}`,
-    title: `测试任务 ${i}`,
-    content: `这是系统自动生成的第 ${i} 个测试任务的详情描述内容。你可以在这里看到多行文本的截断效果。`,
-    date: new Date().toLocaleString(),
-    status: '已发布',
-    estimatedCompletionTime: defaultEstimatedTime
-  })
+// 删除任务方法
+const deleteTask = async (taskId: string) => {
+  try {
+    const response = await fetch(`http://localhost:8080/api/tasks/delete/${taskId}`, {
+      method: 'DELETE'
+    })
+    if (!response.ok) throw new Error('网络请求失败')
+    
+    // 检查后端是否返回 false
+    const success = await response.json()
+    if (!success) throw new Error('后端返回 false，任务删除失败（可能已不存在）')
+    
+    // 删除成功后立马请求接口 刷新数据
+    await fetchTasks()
+    
+    // 处理边界情况：如果当前页的数据被删空了且不是第一页，自动跳回上一页
+    if (paginatedTasks.value.length === 0 && currentPage.value > 1) {
+      currentPage.value--
+    }
+  } catch (error) {
+    console.error('API 请求出错:', error)
+    alert('删除任务失败，请重试。')
+  }
 }
+
+// 获取任务列表接口
+const fetchTasks = async () => {
+  try {
+    const response = await fetch('http://localhost:8080/api/tasks/list')
+    if (!response.ok) throw new Error('获取任务列表失败')
+    
+    const data = await response.json()
+    // 将后端返回的数据映射到 tasks 数组，并且翻转数组让最新创建的任务排在最前面
+    tasks.value = data.reverse().map((t: any) => ({
+      ...t,
+      id: t.id.toString(), // 确保 id 是字符串，适配前端
+      date: t.createTime ? t.createTime.replace('T', ' ') : ''
+    }))
+  } catch (error) {
+    console.error('API 请求出错:', error)
+  }
+}
+
+// 页面加载时自动调用接口
+onMounted(() => {
+  fetchTasks()
+})
 </script>
 
 <style scoped>
 .task-page {
-  max-width: 900px;
+  width: 900px;
+  max-width: 100%;
   margin: 0 auto;
   padding: 20px;
   font-family: system-ui, -apple-system, sans-serif;
@@ -235,5 +286,44 @@ input:focus, textarea:focus {
 .page-info {
   font-size: 14px;
   color: #666;
+}
+
+/* --- 响应式 / 移动端兼容样式 --- */
+
+/* 平板及小尺寸桌面 (最大宽度 768px) */
+@media (max-width: 768px) {
+  .task-grid {
+    grid-template-columns: repeat(2, 1fr); /* 平板下改为 2 列 */
+  }
+  
+  .inline-form-group {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .inline-form-group .date-label {
+    margin-bottom: 8px; /* 恢复标签下边距 */
+  }
+}
+
+/* 手机端 (最大宽度 480px) */
+@media (max-width: 480px) {
+  .task-page {
+    padding: 16px; /* 减小手机端页面内边距 */
+    width: calc(100% - 32px);
+  }
+  
+  .task-grid {
+    grid-template-columns: 1fr; /* 手机下改为单列铺满 */
+  }
+  
+  .submit-btn {
+    width: 100%; /* 按钮占满全宽，方便手指点击 */
+  }
+  
+  .pagination {
+    flex-direction: column;
+    gap: 10px;
+  }
 }
 </style>
