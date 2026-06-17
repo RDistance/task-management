@@ -47,6 +47,9 @@ import { ref, computed, onMounted } from 'vue'
 import TaskCard from '../components/TaskCard.vue'
 import type { Task } from '../types/task.ts'
 
+// 获取当前环境的 API 基础地址
+// 优先使用环境变量，如果没有配置则回退到本地的 localhost
+//const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 
 // 状态定义
 const tasks = ref<Task[]>([])
@@ -78,7 +81,7 @@ const publishTask = async () => {
   }
 
   try {
-    const response = await fetch('http://localhost:8080/api/tasks/create', {
+    const response = await fetch(`/api/tasks/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(taskData)
@@ -102,7 +105,7 @@ const publishTask = async () => {
 // 接收子组件抛出的更新事件，并同步数据
 const updateTask = async (updatedTask: Task) => {
   try {
-    const response = await fetch('http://localhost:8080/api/tasks/update', {
+    const response = await fetch(`/api/tasks/update`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updatedTask)
@@ -120,7 +123,7 @@ const updateTask = async (updatedTask: Task) => {
 // 删除任务方法
 const deleteTask = async (taskId: string) => {
   try {
-    const response = await fetch(`http://localhost:8080/api/tasks/delete/${taskId}`, {
+    const response = await fetch(`/api/tasks/delete/${taskId}`, {
       method: 'DELETE'
     })
     if (!response.ok) throw new Error('网络请求失败')
@@ -145,7 +148,7 @@ const deleteTask = async (taskId: string) => {
 // 获取任务列表接口
 const fetchTasks = async () => {
   try {
-    const response = await fetch('http://localhost:8080/api/tasks/list')
+    const response = await fetch(`/api/tasks/list`)
     if (!response.ok) throw new Error('获取任务列表失败')
     
     const data = await response.json()
